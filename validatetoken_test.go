@@ -7,13 +7,13 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	// yaegi:tags safe
 	jwt "github.com/dgrijalva/jwt-go"
-	// yaegi:tags safe
-	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/slices"
 )
 
 type JwtClaim struct {
@@ -39,9 +39,17 @@ func TestValidToken(t *testing.T) {
 	validToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, azureJwtPlugin.config.Audience[0], azureJwtPlugin.config.Issuer)
 	extractedToken, err = createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
 
-	assert.NoError(t, err)
-	assert.Equal(t, azureJwtPlugin.config.Roles, extractedToken.Payload.Roles)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+		t.Error("Roles do not match.")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestExpiredToken(t *testing.T) {
@@ -58,9 +66,19 @@ func TestExpiredToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
 
-	assert.Contains(t, err.Error(), "token is expired")
-	assert.Equal(t, azureJwtPlugin.config.Roles, extractedToken.Payload.Roles)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if err != nil {
+		if !strings.Contains(err.Error(), "token is expired") {
+			t.Error("Token is still valid.")
+		}
+	}
+
+	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+		t.Error("Roles do not match.")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestWrongAudienceToken(t *testing.T) {
@@ -77,9 +95,21 @@ func TestWrongAudienceToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
 
-	assert.EqualError(t, err, "token audience is wrong")
-	assert.Equal(t, azureJwtPlugin.config.Roles, extractedToken.Payload.Roles)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if err != nil {
+		if err.Error() == "token audience is wrong" {
+			t.Log("Successfuly validated error message")
+		} else {
+			t.Error("Expecting wrong audience but instead got a right one.")
+		}
+	}
+
+	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+		t.Error("Roles do not match.")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestWrongAudienceInMultipleToken(t *testing.T) {
@@ -96,9 +126,20 @@ func TestWrongAudienceInMultipleToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
 
-	assert.EqualError(t, err, "token audience is wrong")
-	assert.Equal(t, azureJwtPlugin.config.Roles, extractedToken.Payload.Roles)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if err != nil {
+		if err.Error() == "token audience is wrong" {
+			t.Log("Successfuly validated error message")
+		} else {
+			t.Error("Expecting wrong audience but instead got a right one.")
+		}
+	}
+	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+		t.Error("Roles do not match.")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestValidAudienceInMultipleToken(t *testing.T) {
@@ -115,10 +156,21 @@ func TestValidAudienceInMultipleToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
 
-	assert.NotNil(t, extractedToken)
-	assert.Nil(t, err)
-	assert.Equal(t, azureJwtPlugin.config.Roles, extractedToken.Payload.Roles)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if extractedToken == nil {
+		t.Error("Token is nil")
+	}
+
+	if err != nil {
+		t.Error("Token is not valid.")
+	}
+
+	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+		t.Error("Roles do not match.")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestMissingRolesInToken(t *testing.T) {
@@ -135,9 +187,13 @@ func TestMissingRolesInToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
 
-	assert.NoError(t, err)
+	if err != nil {
+		t.Error("Token is not valid")
+	}
 
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestOneRoleInToken(t *testing.T) {
@@ -155,9 +211,15 @@ func TestOneRoleInToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
 
-	assert.EqualError(t, err, "missing correct role")
+	if err.Error() == "missing correct role" {
+		t.Log("Successfuly confirm missing correct role")
+	} else {
+		t.Error("Failed to validate role")
+	}
 
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func TestNoRolesInToken(t *testing.T) {
@@ -173,8 +235,13 @@ func TestNoRolesInToken(t *testing.T) {
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
 
-	assert.NoError(t, err)
-	assert.Equal(t, azureJwtPlugin.config.Issuer, extractedToken.Payload.Iss)
+	if err != nil {
+		t.Error("Token is not valid")
+	}
+
+	if azureJwtPlugin.config.Issuer != extractedToken.Payload.Iss {
+		t.Error("Issuer does not match.")
+	}
 }
 
 func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, publicKey *rsa.PublicKey, token string) (*AzureJwt, error) {
@@ -185,7 +252,9 @@ func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, 
 	request := httptest.NewRequest(http.MethodGet, "/testtoken", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
 	extractedToken, err := azureJwtPlugin.ExtractToken(request)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = azureJwtPlugin.ValidateToken(extractedToken)
 
