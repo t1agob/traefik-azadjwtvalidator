@@ -13,7 +13,6 @@ import (
 
 	// yaegi:tags safe
 	jwt "github.com/dgrijalva/jwt-go"
-	"golang.org/x/exp/slices"
 )
 
 type JwtClaim struct {
@@ -43,7 +42,7 @@ func TestValidToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+	if !SliceCompare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) {
 		t.Error("Roles do not match.")
 	}
 
@@ -72,7 +71,7 @@ func TestExpiredToken(t *testing.T) {
 		}
 	}
 
-	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+	if !SliceCompare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) {
 		t.Error("Roles do not match.")
 	}
 
@@ -103,7 +102,7 @@ func TestWrongAudienceToken(t *testing.T) {
 		}
 	}
 
-	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+	if !SliceCompare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) {
 		t.Error("Roles do not match.")
 	}
 
@@ -133,7 +132,7 @@ func TestWrongAudienceInMultipleToken(t *testing.T) {
 			t.Error("Expecting wrong audience but instead got a right one.")
 		}
 	}
-	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+	if !SliceCompare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) {
 		t.Error("Roles do not match.")
 	}
 
@@ -164,7 +163,7 @@ func TestValidAudienceInMultipleToken(t *testing.T) {
 		t.Error("Token is not valid.")
 	}
 
-	if slices.Compare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) != 0 {
+	if !SliceCompare(azureJwtPlugin.config.Roles, extractedToken.Payload.Roles) {
 		t.Error("Roles do not match.")
 	}
 
@@ -300,4 +299,17 @@ func PublicKeyToBytes(pub *rsa.PublicKey) []byte {
 	})
 
 	return pubBytes
+}
+
+func SliceCompare(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
