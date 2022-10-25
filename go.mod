@@ -1,8 +1,5 @@
-module github.com/traefik/plugindemo
+module github.com/t1agob/traefik-azadjwtvalidator
 
 go 1.19
 
-require (
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	golang.org/x/exp v0.0.0-20221023144134-a1e5550cf13e
-)
+require github.com/dgrijalva/jwt-go v3.2.0+incompatible

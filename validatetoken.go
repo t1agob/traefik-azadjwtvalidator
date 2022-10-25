@@ -19,8 +19,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/slices"
 )
 
 var rsakeys map[string]*rsa.PublicKey
@@ -273,7 +271,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 
 func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 	// if parsedClaims.Aud != azureJwt.config.Audience {
-	if !slices.Contains(azureJwt.config.Audience, parsedClaims.Aud) {
+	if !SliceContains(azureJwt.config.Audience, parsedClaims.Aud) {
 		return errors.New("token audience is wrong")
 	}
 
@@ -323,5 +321,14 @@ func (claims *Claims) isValidForRole(configRole string) bool {
 		}
 	}
 
+	return false
+}
+
+func SliceContains(a []string, b string) bool {
+	for _, v := range a {
+		if v == b {
+			return true
+		}
+	}
 	return false
 }
