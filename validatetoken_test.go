@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -263,6 +264,7 @@ func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, 
 func generateTestToken(expiresAt time.Time, roles []string, audience string, issuer string) (testtoken string, publicKey *rsa.PublicKey) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
+		fmt.Println("Error generating key", err)
 		panic(err)
 	}
 
