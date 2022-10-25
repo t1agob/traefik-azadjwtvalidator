@@ -12,6 +12,7 @@ import (
 
 	// yaegi:tags safe
 	jwt "github.com/dgrijalva/jwt-go"
+	// yaegi:tags safe
 	"github.com/stretchr/testify/assert"
 )
 
