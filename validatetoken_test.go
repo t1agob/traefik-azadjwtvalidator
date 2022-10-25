@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	// yaegi:tags safe
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/stretchr/testify/assert"
 )
