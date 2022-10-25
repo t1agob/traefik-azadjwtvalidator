@@ -11,7 +11,7 @@ linters-settings:
   golint:
     min-confidence: 0
   gocyclo:
-    min-complexity: 12
+    min-complexity: 15
   goconst:
     min-len: 5
     min-occurrences: 4
@@ -24,7 +24,7 @@ linters-settings:
     keywords:
       - FIXME
   gofumpt:
-    extra-rules: true
+    extra-rules: false
 
 linters:
   enable-all: true
@@ -61,6 +61,10 @@ linters:
     - gomnd
     - forbidigo
     - varnamelen
+    - gochecknoglobals
+    - gofumpt
+    - forcetypeassert
+    - nestif
 
 issues:
   exclude-use-default: false

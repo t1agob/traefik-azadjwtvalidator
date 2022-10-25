@@ -1,4 +1,4 @@
-// Azure AD JWT Validator
+// Package traefikazadjwtvalidator is a Traefik middleware to validate Azure AD JWT Tokens.
 package traefikazadjwtvalidator
 
 import (
@@ -34,15 +34,16 @@ type Config struct {
 	LogLevel      string
 }
 
+// AzureJwtPlugin contains the configuration for the Traefik Plugin.
 type AzureJwtPlugin struct {
 	next   http.Handler
 	config *Config
 }
 
 var (
-	LoggerINFO  = log.New(io.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	LoggerDEBUG = log.New(io.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	LoggerWARN  = log.New(io.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerINFO  = log.New(io.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerDEBUG = log.New(io.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerWARN  = log.New(io.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 // CreateConfig creates the default plugin configuration.
@@ -52,14 +53,14 @@ func CreateConfig() *Config {
 
 // New created a new Demo plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	LoggerWARN.SetOutput(os.Stdout)
+	loggerWARN.SetOutput(os.Stdout)
 
 	switch config.LogLevel {
 	case "INFO":
-		LoggerINFO.SetOutput(os.Stdout)
+		loggerINFO.SetOutput(os.Stdout)
 	case "DEBUG":
-		LoggerINFO.SetOutput(os.Stdout)
-		LoggerDEBUG.SetOutput(os.Stdout)
+		loggerINFO.SetOutput(os.Stdout)
+		loggerDEBUG.SetOutput(os.Stdout)
 	}
 
 	if len(config.Audience) == 0 {
@@ -92,13 +93,13 @@ func (azureJwt *AzureJwtPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	if err == nil {
 		valerr := azureJwt.ValidateToken(token)
 		if valerr == nil {
-			LoggerDEBUG.Println("Accepted request")
+			loggerDEBUG.Println("Accepted request")
 			tokenValid = true
 		} else {
-			LoggerDEBUG.Println(valerr)
+			loggerDEBUG.Println(valerr)
 		}
 	} else {
-		LoggerDEBUG.Println(err)
+		loggerDEBUG.Println(err)
 	}
 
 	if tokenValid {
@@ -115,23 +116,28 @@ func (azureJwt *AzureJwtPlugin) scheduleUpdateKeys(config *Config) {
 	}
 }
 
+// GetPublicKeys .
 func (azureJwt *AzureJwtPlugin) GetPublicKeys(config *Config) {
 	err := verifyAndSetPublicKey(config.PublicKey)
 
 	if err == nil {
-		LoggerWARN.Println("failed to load public key. ", err)
+		loggerWARN.Println("failed to load public key. ", err)
 	}
 
 	if strings.TrimSpace(config.KeysURL) != "" {
 		var body map[string]interface{}
 		resp, err := http.Get(config.KeysURL)
-
 		if err != nil {
-			LoggerWARN.Println("failed to load public key from:", config.KeysURL)
+			loggerWARN.Println("failed to load public key from:", config.KeysURL)
 		} else {
-			json.NewDecoder(resp.Body).Decode(&body)
+			err = json.NewDecoder(resp.Body).Decode(&body)
+			if err != nil {
+				loggerWARN.Println("failed ot decode body:", resp.Body)
+			}
+
 			for _, bodykey := range body["keys"].([]interface{}) {
 				key := bodykey.(map[string]interface{})
+
 				kid := key["kid"].(string)
 				e := key["e"].(string)
 				rsakey := new(rsa.PublicKey)
@@ -167,17 +173,22 @@ func verifyAndSetPublicKey(publicKey string) error {
 			return fmt.Errorf("unable to parse RSA public key")
 		}
 
-		if pubKey, ok := parsedKey.(*rsa.PublicKey); !ok {
+		var (
+			pubKey *rsa.PublicKey
+			ok     bool
+		)
+
+		if pubKey, ok = parsedKey.(*rsa.PublicKey); !ok {
 			return fmt.Errorf("unable to convert RSA public key")
-		} else {
-			rsakeys["config_rsa"] = pubKey
 		}
+
+		rsakeys["config_rsa"] = pubKey
 	}
 
 	return nil
 }
 
-// Extract Json Web Token.
+// ExtractToken .
 func (azureJwt *AzureJwtPlugin) ExtractToken(request *http.Request) (*AzureJwt, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
@@ -228,7 +239,7 @@ func (azureJwt *AzureJwtPlugin) ExtractToken(request *http.Request) (*AzureJwt, 
 	return &jwtToken, nil
 }
 
-// Validates Json Web Token.
+// ValidateToken checks if Json Web Token passed as parameter is valid.
 func (azureJwt *AzureJwtPlugin) ValidateToken(token *AzureJwt) error {
 	hash := sha256.Sum256(token.RawToken)
 
@@ -249,7 +260,7 @@ func (azureJwt *AzureJwtPlugin) ValidateToken(token *AzureJwt) error {
 	return nil
 }
 
-// Verifies Json Web Token.
+// VerifyToken verifies the Json Web Token passed as parameter.
 func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 	tokenExpiration, err := jwtToken.Payload.Exp.Int64()
 	if err != nil {
@@ -257,7 +268,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 	}
 
 	if tokenExpiration < time.Now().Unix() {
-		LoggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
+		loggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
 		return errors.New("token is expired")
 	}
 
@@ -271,7 +282,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 
 func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 	// if parsedClaims.Aud != azureJwt.config.Audience {
-	if !SliceContains(azureJwt.config.Audience, parsedClaims.Aud) {
+	if !sliceContains(azureJwt.config.Audience, parsedClaims.Aud) {
 		return errors.New("token audience is wrong")
 	}
 
@@ -300,7 +311,7 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 			}
 
 			if !allRolesValid {
-				LoggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
+				loggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
 				return errors.New("missing correct role")
 			}
 		}
@@ -314,17 +325,16 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 func (claims *Claims) isValidForRole(configRole string) bool {
 	for _, parsedRole := range claims.Roles {
 		if parsedRole == configRole {
-			LoggerDEBUG.Println("Match:", parsedRole, configRole)
+			loggerDEBUG.Println("Match:", parsedRole, configRole)
 			return true
-		} else {
-			LoggerDEBUG.Println("No match:", parsedRole, configRole)
 		}
 	}
 
+	loggerDEBUG.Println("No match:", configRole)
 	return false
 }
 
-func SliceContains(a []string, b string) bool {
+func sliceContains(a []string, b string) bool {
 	for _, v := range a {
 		if v == b {
 			return true

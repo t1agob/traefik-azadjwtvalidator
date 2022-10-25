@@ -65,7 +65,6 @@ func TestExpiredToken(t *testing.T) {
 	invalidToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, azureJwtPlugin.config.Audience[0], azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
-
 	if err != nil {
 		if !strings.Contains(err.Error(), "token is expired") {
 			t.Error("Token is still valid.")
@@ -91,13 +90,12 @@ func TestWrongAudienceToken(t *testing.T) {
 	}
 
 	expiresAt := time.Now().Add(time.Hour)
-	invalidToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, "wrong audience", azureJwtPlugin.config.Issuer)
+	invalidToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, "wrong-audience", azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
-
 	if err != nil {
 		if err.Error() == "token audience is wrong" {
-			t.Log("Successfuly validated error message")
+			t.Log("Successfully validated error message")
 		} else {
 			t.Error("Expecting wrong audience but instead got a right one.")
 		}
@@ -125,10 +123,9 @@ func TestWrongAudienceInMultipleToken(t *testing.T) {
 	invalidToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, "wrong-audience", azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
-
 	if err != nil {
 		if err.Error() == "token audience is wrong" {
-			t.Log("Successfuly validated error message")
+			t.Log("Successfully validated error message")
 		} else {
 			t.Error("Expecting wrong audience but instead got a right one.")
 		}
@@ -155,11 +152,6 @@ func TestValidAudienceInMultipleToken(t *testing.T) {
 	invalidToken, publicKey := generateTestToken(expiresAt, azureJwtPlugin.config.Roles, "right-audience", azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, invalidToken)
-
-	if extractedToken == nil {
-		t.Error("Token is nil")
-	}
-
 	if err != nil {
 		t.Error("Token is not valid.")
 	}
@@ -186,7 +178,6 @@ func TestMissingRolesInToken(t *testing.T) {
 	validToken, publicKey := generateTestToken(expiresAt, []string{"test_role_2"}, azureJwtPlugin.config.Audience[0], azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
-
 	if err != nil {
 		t.Error("Token is not valid")
 	}
@@ -212,7 +203,7 @@ func TestOneRoleInToken(t *testing.T) {
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
 
 	if err.Error() == "missing correct role" {
-		t.Log("Successfuly confirm missing correct role")
+		t.Log("Successfully confirm missing correct role")
 	} else {
 		t.Error("Failed to validate role")
 	}
@@ -234,7 +225,6 @@ func TestNoRolesInToken(t *testing.T) {
 	validToken, publicKey := generateTestToken(expiresAt, nil, azureJwtPlugin.config.Audience[0], azureJwtPlugin.config.Issuer)
 
 	extractedToken, err := createRequestAndValidateToken(t, azureJwtPlugin, publicKey, validToken)
-
 	if err != nil {
 		t.Error("Token is not valid")
 	}
@@ -245,6 +235,8 @@ func TestNoRolesInToken(t *testing.T) {
 }
 
 func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, publicKey *rsa.PublicKey, token string) (*AzureJwt, error) {
+	t.Helper()
+
 	azureJwtPlugin.GetPublicKeys(&Config{
 		PublicKey: string(PublicKeyToBytes(publicKey)),
 	})
@@ -261,7 +253,7 @@ func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, 
 	return extractedToken, err
 }
 
-func generateTestToken(expiresAt time.Time, roles []string, audience string, issuer string) (testtoken string, publicKey *rsa.PublicKey) {
+func generateTestToken(expiresAt time.Time, roles []string, audience string, issuer string) (string, *rsa.PublicKey) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		fmt.Println("Error generating key", err)
