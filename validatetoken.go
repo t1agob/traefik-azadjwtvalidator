@@ -12,11 +12,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -31,7 +29,6 @@ type Config struct {
 	Audience      []string
 	Roles         []string
 	MatchAllRoles bool
-	LogLevel      string
 }
 
 // AzureJwtPlugin contains the configuration for the Traefik Plugin.
@@ -40,12 +37,6 @@ type AzureJwtPlugin struct {
 	config *Config
 }
 
-var (
-	loggerINFO  = log.New(io.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	loggerDEBUG = log.New(io.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	loggerWARN  = log.New(io.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-)
-
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{}
@@ -53,16 +44,6 @@ func CreateConfig() *Config {
 
 // New created a new Demo plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	loggerWARN.SetOutput(os.Stdout)
-
-	switch config.LogLevel {
-	case "INFO":
-		loggerINFO.SetOutput(os.Stdout)
-	case "DEBUG":
-		loggerINFO.SetOutput(os.Stdout)
-		loggerDEBUG.SetOutput(os.Stdout)
-	}
-
 	if len(config.Audience) == 0 {
 		return nil, fmt.Errorf("configuration incorrect, missing audience")
 	}
@@ -93,13 +74,12 @@ func (azureJwt *AzureJwtPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	if err == nil {
 		valerr := azureJwt.ValidateToken(token)
 		if valerr == nil {
-			loggerDEBUG.Println("Accepted request")
 			tokenValid = true
 		} else {
-			loggerDEBUG.Println(valerr)
+			fmt.Println("WARN: traefik-azadjwtvalidator: ", valerr)
 		}
 	} else {
-		loggerDEBUG.Println(err)
+		fmt.Println("WARN: traefik-azadjwtvalidator: ", err)
 	}
 
 	if tokenValid {
@@ -119,20 +99,19 @@ func (azureJwt *AzureJwtPlugin) scheduleUpdateKeys(config *Config) {
 // GetPublicKeys .
 func (azureJwt *AzureJwtPlugin) GetPublicKeys(config *Config) {
 	err := verifyAndSetPublicKey(config.PublicKey)
-
 	if err == nil {
-		loggerWARN.Println("failed to load public key. ", err)
+		fmt.Println("WARN: traefik-azadjwtvalidator: failed to load public key. ", err)
 	}
 
 	if strings.TrimSpace(config.KeysURL) != "" {
 		var body map[string]interface{}
 		resp, err := http.Get(config.KeysURL)
 		if err != nil {
-			loggerWARN.Println("failed to load public key from:", config.KeysURL)
+			fmt.Println("WARN: traefik-azadjwtvalidator: failed to load public key from:", config.KeysURL)
 		} else {
 			err = json.NewDecoder(resp.Body).Decode(&body)
 			if err != nil {
-				loggerWARN.Println("failed ot decode body:", resp.Body)
+				fmt.Println("WARN: traefik-azadjwtvalidator: failed ot decode body:", resp.Body)
 			}
 
 			for _, bodykey := range body["keys"].([]interface{}) {
@@ -268,7 +247,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 	}
 
 	if tokenExpiration < time.Now().Unix() {
-		loggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
+		fmt.Println("WARN: traefik-azadjwtvalidator: Token has expired", time.Unix(tokenExpiration, 0))
 		return errors.New("token is expired")
 	}
 
@@ -311,7 +290,7 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 			}
 
 			if !allRolesValid {
-				loggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
+				fmt.Println("WARN: traefik-azadjwtvalidator: missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
 				return errors.New("missing correct role")
 			}
 		}
@@ -325,12 +304,10 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 func (claims *Claims) isValidForRole(configRole string) bool {
 	for _, parsedRole := range claims.Roles {
 		if parsedRole == configRole {
-			loggerDEBUG.Println("Match:", parsedRole, configRole)
 			return true
 		}
 	}
 
-	loggerDEBUG.Println("No match:", configRole)
 	return false
 }
 
