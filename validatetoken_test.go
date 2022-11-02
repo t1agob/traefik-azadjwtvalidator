@@ -13,7 +13,7 @@ import (
 	"time"
 
 	// yaegi:tags safe
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v4"
 )
 
 type JwtClaim struct {
