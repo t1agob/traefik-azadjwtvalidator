@@ -12,9 +12,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -29,6 +31,7 @@ type Config struct {
 	Audience      []string
 	Roles         []string
 	MatchAllRoles bool
+	LogLevel      string
 }
 
 // AzureJwtPlugin contains the configuration for the Traefik Plugin.
@@ -37,6 +40,12 @@ type AzureJwtPlugin struct {
 	config *Config
 }
 
+var (
+	LoggerINFO  = log.New(ioutil.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	LoggerDEBUG = log.New(ioutil.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	LoggerWARN  = log.New(ioutil.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+)
+
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{}
@@ -44,6 +53,16 @@ func CreateConfig() *Config {
 
 // New created a new Demo plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
+	LoggerWARN.SetOutput(os.Stdout)
+
+	switch config.LogLevel {
+	case "INFO":
+		LoggerINFO.SetOutput(os.Stdout)
+	case "DEBUG":
+		LoggerINFO.SetOutput(os.Stdout)
+		LoggerDEBUG.SetOutput(os.Stdout)
+	}
+
 	if len(config.Audience) == 0 {
 		return nil, fmt.Errorf("configuration incorrect, missing audience")
 	}
@@ -74,12 +93,13 @@ func (azureJwt *AzureJwtPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	if err == nil {
 		valerr := azureJwt.ValidateToken(token)
 		if valerr == nil {
+			LoggerDEBUG.Println("Accepted request")
 			tokenValid = true
 		} else {
-			fmt.Println("WARN: traefik-azadjwtvalidator: ", valerr)
+			LoggerDEBUG.Println(valerr)
 		}
 	} else {
-		fmt.Println("WARN: traefik-azadjwtvalidator: ", err)
+		LoggerDEBUG.Println(err)
 	}
 
 	if tokenValid {
@@ -99,19 +119,19 @@ func (azureJwt *AzureJwtPlugin) scheduleUpdateKeys(config *Config) {
 // GetPublicKeys .
 func (azureJwt *AzureJwtPlugin) GetPublicKeys(config *Config) {
 	err := verifyAndSetPublicKey(config.PublicKey)
-	if err == nil {
-		fmt.Println("WARN: traefik-azadjwtvalidator: failed to load public key. ", err)
+	if err != nil {
+		LoggerWARN.Println("failed to load public key. ", err)
 	}
 
 	if strings.TrimSpace(config.KeysURL) != "" {
 		var body map[string]interface{}
 		resp, err := http.Get(config.KeysURL)
 		if err != nil {
-			fmt.Println("WARN: traefik-azadjwtvalidator: failed to load public key from:", config.KeysURL)
+			LoggerWARN.Println("failed to load public key from:", config.KeysURL)
 		} else {
 			err = json.NewDecoder(resp.Body).Decode(&body)
 			if err != nil {
-				fmt.Println("WARN: traefik-azadjwtvalidator: failed ot decode body:", resp.Body)
+				LoggerWARN.Println("failed ot decode body:", resp.Body)
 			}
 
 			for _, bodykey := range body["keys"].([]interface{}) {
@@ -247,7 +267,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 	}
 
 	if tokenExpiration < time.Now().Unix() {
-		fmt.Println("WARN: traefik-azadjwtvalidator: Token has expired", time.Unix(tokenExpiration, 0))
+		LoggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
 		return errors.New("token is expired")
 	}
 
@@ -290,7 +310,7 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 			}
 
 			if !allRolesValid {
-				fmt.Println("WARN: traefik-azadjwtvalidator: missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
+				LoggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
 				return errors.New("missing correct role")
 			}
 		}
@@ -304,7 +324,10 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 func (claims *Claims) isValidForRole(configRole string) bool {
 	for _, parsedRole := range claims.Roles {
 		if parsedRole == configRole {
+			LoggerDEBUG.Println("Match:", parsedRole, configRole)
 			return true
+		} else {
+			LoggerDEBUG.Println("No match:", parsedRole, configRole)
 		}
 	}
 
