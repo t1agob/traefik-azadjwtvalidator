@@ -254,7 +254,7 @@ func createRequestAndValidateToken(t *testing.T, azureJwtPlugin AzureJwtPlugin, 
 }
 
 func generateTestToken(t *testing.T, expiresAt time.Time, roles []string, audience string, issuer string) (string, *rsa.PublicKey) {
-	t.Helper()
+	// t.Helper()
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
