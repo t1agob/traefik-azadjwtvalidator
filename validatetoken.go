@@ -12,13 +12,15 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v4"
 )
 
 var rsakeys map[string]*rsa.PublicKey
@@ -28,7 +30,7 @@ type Config struct {
 	PublicKey     string
 	KeysURL       string
 	Issuer        string
-	Audience      []string
+	Audience      jwt.ClaimStrings
 	Roles         []string
 	MatchAllRoles bool
 	LogLevel      string
@@ -41,9 +43,9 @@ type AzureJwtPlugin struct {
 }
 
 var (
-	LoggerINFO  = log.New(ioutil.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	LoggerDEBUG = log.New(ioutil.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
-	LoggerWARN  = log.New(ioutil.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerINFO  = log.New(io.Discard, "INFO: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerDEBUG = log.New(io.Discard, "DEBUG: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
+	loggerWARN  = log.New(io.Discard, "WARN: azure-jwt-token-validator: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 // CreateConfig creates the default plugin configuration.
@@ -53,14 +55,14 @@ func CreateConfig() *Config {
 
 // New created a new Demo plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	LoggerWARN.SetOutput(os.Stdout)
+	loggerWARN.SetOutput(os.Stdout)
 
 	switch config.LogLevel {
 	case "INFO":
-		LoggerINFO.SetOutput(os.Stdout)
+		loggerINFO.SetOutput(os.Stdout)
 	case "DEBUG":
-		LoggerINFO.SetOutput(os.Stdout)
-		LoggerDEBUG.SetOutput(os.Stdout)
+		loggerINFO.SetOutput(os.Stdout)
+		loggerDEBUG.SetOutput(os.Stdout)
 	}
 
 	if len(config.Audience) == 0 {
@@ -93,13 +95,13 @@ func (azureJwt *AzureJwtPlugin) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	if err == nil {
 		valerr := azureJwt.ValidateToken(token)
 		if valerr == nil {
-			LoggerDEBUG.Println("Accepted request")
+			loggerDEBUG.Println("Accepted request")
 			tokenValid = true
 		} else {
-			LoggerDEBUG.Println(valerr)
+			loggerDEBUG.Println(valerr)
 		}
 	} else {
-		LoggerDEBUG.Println(err)
+		loggerDEBUG.Println(err)
 	}
 
 	if tokenValid {
@@ -120,18 +122,18 @@ func (azureJwt *AzureJwtPlugin) scheduleUpdateKeys(config *Config) {
 func (azureJwt *AzureJwtPlugin) GetPublicKeys(config *Config) {
 	err := verifyAndSetPublicKey(config.PublicKey)
 	if err != nil {
-		LoggerWARN.Println("failed to load public key. ", err)
+		loggerWARN.Println("failed to load public key. ", err)
 	}
 
 	if strings.TrimSpace(config.KeysURL) != "" {
 		var body map[string]interface{}
 		resp, err := http.Get(config.KeysURL)
 		if err != nil {
-			LoggerWARN.Println("failed to load public key from:", config.KeysURL)
+			loggerWARN.Println("failed to load public key from:", config.KeysURL)
 		} else {
 			err = json.NewDecoder(resp.Body).Decode(&body)
 			if err != nil {
-				LoggerWARN.Println("failed ot decode body:", resp.Body)
+				loggerWARN.Println("failed ot decode body:", resp.Body)
 			}
 
 			for _, bodykey := range body["keys"].([]interface{}) {
@@ -267,7 +269,7 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 	}
 
 	if tokenExpiration < time.Now().Unix() {
-		LoggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
+		loggerDEBUG.Println("Token has expired", time.Unix(tokenExpiration, 0))
 		return errors.New("token is expired")
 	}
 
@@ -280,9 +282,24 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 }
 
 func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
-	// if parsedClaims.Aud != azureJwt.config.Audience {
-	if !sliceContains(azureJwt.config.Audience, parsedClaims.Aud) {
-		return errors.New("token audience is wrong")
+	if parsedClaims.Aud != nil {
+		if len(azureJwt.config.Audience) > 0 {
+
+			validAudClaims := false
+			for _, aud := range azureJwt.config.Audience {
+				audValid := parsedClaims.isValidForAudience(aud)
+				if audValid {
+					loggerDEBUG.Println("JWT audience valid")
+					validAudClaims = true
+
+					break
+				}
+			}
+
+			if !validAudClaims {
+				return errors.New("token audience is wrong")
+			}
+		}
 	}
 
 	if parsedClaims.Iss != azureJwt.config.Issuer {
@@ -310,7 +327,7 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 			}
 
 			if !allRolesValid {
-				LoggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
+				loggerDEBUG.Println("missing correct role, found: " + strings.Join(parsedClaims.Roles, ",") + ", expected: " + strings.Join(azureJwt.config.Roles, ","))
 				return errors.New("missing correct role")
 			}
 		}
@@ -321,14 +338,27 @@ func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
 	return nil
 }
 
+func (claims *Claims) isValidForAudience(configAud string) bool {
+	for _, parsedAud := range claims.Aud {
+		if parsedAud == configAud {
+			loggerDEBUG.Println("Match:", parsedAud, configAud)
+			return true
+		}
+
+		loggerDEBUG.Println("No match:", parsedAud, configAud)
+	}
+
+	return false
+}
+
 func (claims *Claims) isValidForRole(configRole string) bool {
 	for _, parsedRole := range claims.Roles {
 		if parsedRole == configRole {
-			LoggerDEBUG.Println("Match:", parsedRole, configRole)
+			loggerDEBUG.Println("Match:", parsedRole, configRole)
 			return true
-		} else {
-			LoggerDEBUG.Println("No match:", parsedRole, configRole)
 		}
+
+		loggerDEBUG.Println("No match:", parsedRole, configRole)
 	}
 
 	return false
