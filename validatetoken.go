@@ -282,24 +282,9 @@ func (azureJwt *AzureJwtPlugin) VerifyToken(jwtToken *AzureJwt) error {
 }
 
 func (azureJwt *AzureJwtPlugin) validateClaims(parsedClaims *Claims) error {
-	if parsedClaims.Aud != nil {
-		if len(azureJwt.config.Audience) > 0 {
-
-			validAudClaims := false
-			for _, aud := range azureJwt.config.Audience {
-				audValid := parsedClaims.isValidForAudience(aud)
-				if audValid {
-					loggerDEBUG.Println("JWT audience valid")
-					validAudClaims = true
-
-					break
-				}
-			}
-
-			if !validAudClaims {
-				return errors.New("token audience is wrong")
-			}
-		}
+	validAudience := validateAudience(azureJwt.config.Audience, parsedClaims)
+	if !validAudience {
+		return errors.New("token audience is wrong")
 	}
 
 	if parsedClaims.Iss != azureJwt.config.Issuer {
@@ -364,11 +349,25 @@ func (claims *Claims) isValidForRole(configRole string) bool {
 	return false
 }
 
-func sliceContains(a []string, b string) bool {
-	for _, v := range a {
-		if v == b {
-			return true
+func validateAudience(configAud jwt.ClaimStrings, claims *Claims) bool {
+	if claims.Aud != nil {
+		if len(configAud) > 0 {
+			validAudClaims := false
+
+			for _, aud := range configAud {
+				audValid := claims.isValidForAudience(aud)
+				if audValid {
+					loggerDEBUG.Println("JWT audience valid")
+					validAudClaims = true
+
+					break
+				}
+			}
+
+			if !validAudClaims {
+				return false
+			}
 		}
 	}
-	return false
+	return true
 }
